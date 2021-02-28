@@ -4,45 +4,82 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.LinkedList;
 
+import static java.lang.System.currentTimeMillis;
+
 public class Server implements Runnable, Closeable {
-    ServerSocket serverSocket;
-    LinkedList<Thread> sessions;
-    int port;
+    private volatile ServerSocket serverSocket;
+    final private  LinkedList<Thread> sThreads;
+    final private LinkedList<Session> sessions;
+    final private int port;
+    final private int secondsWaitingForClients;
 
     public Server(int port) {
         this.port = port;
+        secondsWaitingForClients = 10;
         try {
             serverSocket = new ServerSocket(port);
         } catch (IOException e) {
             e.printStackTrace();
         }
-        sessions = new LinkedList<Thread>();
+        sessions = new LinkedList<>();
+        sThreads = new LinkedList<>();
     }
 
     public void run() {
+        long idleSince = 0;
+        clientListener();
         while (!serverSocket.isClosed()) {
-            try {
-                System.out.println("Waiting for client... ");
-                Socket socket = serverSocket.accept();
-                System.out.println("Connection established.");
-                sessions.addFirst(new Thread(new Session(socket)));
-                sessions.getFirst().start();
-                System.out.println("Client online @ T#" + sessions.getFirst().getId());
-            } catch (IOException e) {
-                e.printStackTrace();
-            } finally {
-                for (Thread t : sessions) {
-                    if (t.getState() == Thread.State.TERMINATED) {
-                        System.out.println("T#" + t.getId() + " terminated.");
-                        sessions.remove(t);
+            synchronized (sessions) {
+                for (Session s : sessions) {
+                    while (s.countStack() > 0) {
+                        String line = s.popStack();
+                        for (Session ss : sessions) {
+                            ss.push(line);
+                        }
                     }
                 }
-                if (sessions.size() == 0) {
-                    System.out.print("All sessions terminated. ");
-                    close();
+            }
+            synchronized (sThreads) {
+                for (Thread t : sThreads) {
+                    if (t.getState() == Thread.State.TERMINATED) {
+                        System.out.println("T#" + t.getId() + " terminated.");
+                        sThreads.remove(t);
+                    }
                 }
+                if (sThreads.size() == 0) {
+                    if (idleSince == 0) idleSince = currentTimeMillis();
+                    if (currentTimeMillis() - idleSince > secondsWaitingForClients * 1000) {
+                        System.out.print("All sessions terminated. ");
+                        close();
+                    }
+                } else idleSince = 0;
             }
         }
+    }
+
+    private void clientListener() {
+        Runnable getClient = () -> {
+            while (!serverSocket.isClosed()) {
+                try {
+                    System.out.println("Waiting for client... ");
+                    Socket socket = serverSocket.accept();
+                    System.out.println("Connection established.");
+                    synchronized (sessions) {
+                        sessions.add(new Session(socket));
+
+                        synchronized (sThreads) {
+                            sThreads.add(new Thread(sessions.getLast()));
+                            sThreads.getLast().start();
+                            System.out.println("Client online on T#" + sThreads.getLast().getId());
+                        }
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        };
+        Thread clientListener = new Thread(getClient);
+        clientListener.start();
     }
 
     public void close() {

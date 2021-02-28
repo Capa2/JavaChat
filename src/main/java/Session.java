@@ -1,13 +1,16 @@
 import java.io.*;
 import java.net.Socket;
+import java.util.Stack;
 
 public class Session implements Runnable, Closeable {
-    Socket socket;
-    DataInputStream in;
-    DataOutputStream out;
+    private Socket socket;
+    private DataInputStream in;
+    private DataOutputStream out;
+    private Stack<String> pulls;
 
     public Session(Socket socket) {
         this.socket = socket;
+        pulls = new Stack<String>();
         try {
             in = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
             out = new DataOutputStream(socket.getOutputStream());
@@ -20,7 +23,7 @@ public class Session implements Runnable, Closeable {
         while(socket.isConnected()) {
             String line = pull();
             if (line.equals("quit")) break;
-            System.out.println(line);
+            pulls.add(line);
             push(": " + line);
         }
         try {
@@ -31,7 +34,7 @@ public class Session implements Runnable, Closeable {
         close();
     }
 
-    private void push(String string) {
+    public void push(String string) {
         try {
             out.writeUTF(string);
         } catch (IOException e) {
@@ -46,6 +49,12 @@ public class Session implements Runnable, Closeable {
             e.printStackTrace();
         }
         return null;
+    }
+    public int countStack() {
+        return pulls.size();
+    }
+    public String popStack() {
+        return pulls.pop();
     }
 
     public void close() {
