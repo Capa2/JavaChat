@@ -3,10 +3,11 @@ import java.net.Socket;
 import java.util.Stack;
 
 public class Session implements Runnable, Closeable {
-    private Socket socket;
+    final private Socket socket;
     private DataInputStream in;
     private DataOutputStream out;
-    private Stack<String> pulls;
+    final private Stack<String> pulls;
+    private User user;
 
     public Session(Socket socket) {
         this.socket = socket;
@@ -24,7 +25,6 @@ public class Session implements Runnable, Closeable {
             String line = pull();
             if (line.equals("quit")) break;
             pulls.add(line);
-            push(": " + line);
         }
         try {
             out.flush();
@@ -55,6 +55,14 @@ public class Session implements Runnable, Closeable {
     }
     public String popStack() {
         return pulls.pop();
+    }
+
+    public void setUser(User user) {
+        this.user = user;
+    }
+
+    public User getUser() {
+        return user;
     }
 
     public void close() {

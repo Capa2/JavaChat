@@ -8,21 +8,21 @@ import static java.lang.System.currentTimeMillis;
 
 public class Server implements Runnable, Closeable {
     private volatile ServerSocket serverSocket;
-    final private  LinkedList<Thread> sThreads;
+    final private LinkedList<Thread> sThreads;
     final private LinkedList<Session> sessions;
-    final private int port;
+    final private Users users;
     final private int secondsWaitingForClients;
 
     public Server(int port) {
-        this.port = port;
+        users = new Users(true);
         secondsWaitingForClients = 10;
         try {
             serverSocket = new ServerSocket(port);
         } catch (IOException e) {
             e.printStackTrace();
         }
-        sessions = new LinkedList<>();
-        sThreads = new LinkedList<>();
+        sessions = new LinkedList<Session>();
+        sThreads = new LinkedList<Thread>();
     }
 
     public void run() {
@@ -30,11 +30,13 @@ public class Server implements Runnable, Closeable {
         clientListener();
         while (!serverSocket.isClosed()) {
             synchronized (sessions) {
-                for (Session s : sessions) {
-                    while (s.countStack() > 0) {
-                        String line = s.popStack();
-                        for (Session ss : sessions) {
-                            ss.push(line);
+                for (Session sender : sessions) {
+                    while (sender.countStack() > 0) {
+                        String line = sender.popStack();
+                        if (pullReader(sender, line)) {
+                            for (Session reciever : sessions) {
+                                reciever.push(sender.getUser().getUsername() + ": " + line);
+                            }
                         }
                     }
                 }
@@ -57,6 +59,24 @@ public class Server implements Runnable, Closeable {
         }
     }
 
+    private synchronized boolean pullReader(Session session, String string) {
+        // return true to push to all clients.
+        if (string.startsWith("login")) {
+            if (session.getUser() == null) {
+                if (users.validateUser(string.split(" ")[1],string.split(" ")[2])) {
+                    session.setUser(users.getValidUser(string.split(" ")[1],string.split(" ")[2]));
+                    session.push("Success: logged in as " + session.getUser().getUsername());
+                } else session.push("Error: username/password not recognized.");
+            } else session.push("Error: already logged in as" + session.getUser().getUsername());
+            return false;
+        }
+        if (session.getUser() == null){
+            session.push("Error: Please login with \"login <username> <password>\"");
+            return false;
+        }
+        return true;
+    }
+
     private void clientListener() {
         Runnable getClient = () -> {
             while (!serverSocket.isClosed()) {
@@ -74,7 +94,7 @@ public class Server implements Runnable, Closeable {
                         }
                     }
                 } catch (IOException e) {
-                    e.printStackTrace();
+                    if(!serverSocket.isClosed()) e.printStackTrace();
                 }
             }
         };
