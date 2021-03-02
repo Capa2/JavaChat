@@ -62,15 +62,18 @@ public class Server implements Runnable, Closeable {
     private synchronized boolean pullReader(Session session, String string) {
         // return true to push to all clients.
         if (string.startsWith("login")) {
-            if (session.getUser() == null) {
-                if (users.validateUser(string.split(" ")[1],string.split(" ")[2])) {
-                    session.setUser(users.getValidUser(string.split(" ")[1],string.split(" ")[2]));
-                    session.push("Success: logged in as " + session.getUser().getUsername());
-                } else session.push("Error: username/password not recognized.");
-            } else session.push("Error: already logged in as" + session.getUser().getUsername());
-            return false;
+            String[] loginRequest = string.split(" ");
+            if (loginRequest.length == 3) {
+                if (session.getUser() == null) {
+                    if (users.validateUser(loginRequest[1], loginRequest[2])) {
+                        session.setUser(users.getValidUser(string.split(" ")[1], string.split(" ")[2]));
+                        session.push("Success: logged in as " + session.getUser().getUsername());
+                    } else session.push("Error: username/password not recognized.");
+                } else session.push("Error: already logged in as" + session.getUser().getUsername());
+                return false;
+            }
         }
-        if (session.getUser() == null){
+        if (session.getUser() == null) {
             session.push("Error: Please login with \"login <username> <password>\"");
             return false;
         }
@@ -94,7 +97,7 @@ public class Server implements Runnable, Closeable {
                         }
                     }
                 } catch (IOException e) {
-                    if(!serverSocket.isClosed()) e.printStackTrace();
+                    if (!serverSocket.isClosed()) e.printStackTrace();
                 }
             }
         };
