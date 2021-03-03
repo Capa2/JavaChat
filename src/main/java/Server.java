@@ -11,11 +11,11 @@ public class Server implements Runnable, Closeable {
     final private LinkedList<Thread> sThreads;
     final private LinkedList<Session> sessions;
     final private Users users;
-    final private int secondsWaitingForClients;
+    final private int minutesWaitingForClients;
 
     public Server(int port) {
         users = new Users(true);
-        secondsWaitingForClients = 10;
+        minutesWaitingForClients = 30;
         try {
             serverSocket = new ServerSocket(port);
         } catch (IOException e) {
@@ -35,8 +35,9 @@ public class Server implements Runnable, Closeable {
                         String line = sender.popStack();
                         if (pullReader(sender, line)) {
                             for (Session reciever : sessions) {
-                                reciever.push(sender.getUser().getUsername() + ": " + line);
+                                if (!sender.equals(reciever)) reciever.push(sender.getUser().getUsername() + ": " + line);
                             }
+                            System.out.println(sender.getUser().getUsername() + ": " + line);
                         }
                     }
                 }
@@ -50,7 +51,7 @@ public class Server implements Runnable, Closeable {
                 }
                 if (sThreads.size() == 0) {
                     if (idleSince == 0) idleSince = currentTimeMillis();
-                    if (currentTimeMillis() - idleSince > secondsWaitingForClients * 1000) {
+                    if (currentTimeMillis() - idleSince > minutesWaitingForClients * 60 * 1000) {
                         System.out.print("All sessions terminated. ");
                         close();
                     }
@@ -68,7 +69,10 @@ public class Server implements Runnable, Closeable {
                     if (users.validateUser(loginRequest[1], loginRequest[2])) {
                         session.setUser(users.getValidUser(string.split(" ")[1], string.split(" ")[2]));
                         session.push("Success: logged in as " + session.getUser().getUsername());
-                    } else session.push("Error: username/password not recognized.");
+                    } else {
+                        session.push("Error: username/password not recognized.");
+                        return false;
+                    }
                 } else session.push("Error: already logged in as" + session.getUser().getUsername());
                 return false;
             }
