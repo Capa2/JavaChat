@@ -2,14 +2,16 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.LinkedList;
+import java.util.Vector;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import static java.lang.System.currentTimeMillis;
 
 public class Server implements Runnable, Closeable {
     private volatile ServerSocket serverSocket;
-    final private LinkedList<Thread> sThreads;
-    final private LinkedList<Session> sessions;
+    final private ExecutorService threadPool;
+    final private Vector<Session> sessions;
     final private Users users;
     final private int minutesWaitingForClients;
 
@@ -21,44 +23,36 @@ public class Server implements Runnable, Closeable {
         } catch (IOException e) {
             e.printStackTrace();
         }
-        sessions = new LinkedList<Session>();
-        sThreads = new LinkedList<Thread>();
+        sessions = new Vector<>();
+        threadPool = Executors.newFixedThreadPool(10);
     }
 
     public void run() {
-        long idleSince = 0;
+        long terminatedSince = 0;
         clientListener();
         while (!serverSocket.isClosed()) {
-            synchronized (sessions) {
-                for (Session sender : sessions) {
-                    while (sender.countStack() > 0) {
-                        String line = sender.popStack();
-                        if (pullReader(sender, line)) {
-                            for (Session reciever : sessions) {
-                                if (!sender.equals(reciever)) reciever.push(sender.getUser().getUsername() + ": " + line);
-                            }
-                            System.out.println(sender.getUser().getUsername() + ": " + line);
-                        }
+            sessions.forEach((sender) -> {
+                while (sender.haveMorePulls()) {
+                    String line = sender.poll();
+                    if (pullReader(sender, line)) {
+                        sessions.forEach((receiver) -> {
+                            if (!sender.equals(receiver))
+                                receiver.push(sender.getUser().getUsername() + ": " + line);
+                        });
+                        System.out.println(sender.getUser().getUsername() + ": " + line);
                     }
                 }
-            }
-            synchronized (sThreads) {
-                for (Thread t : sThreads) {
-                    if (t.getState() == Thread.State.TERMINATED) {
-                        System.out.println("T#" + t.getId() + " terminated.");
-                        sThreads.remove(t);
-                    }
-                }
-                if (sThreads.size() == 0) {
-                    if (idleSince == 0) idleSince = currentTimeMillis();
-                    if (currentTimeMillis() - idleSince > minutesWaitingForClients * 60 * 1000) {
-                        System.out.print("All sessions terminated. ");
-                        close();
-                    }
-                } else idleSince = 0;
+            });
+        }
+        if (threadPool.isTerminated()) {
+            terminatedSince = (terminatedSince == 0) ? currentTimeMillis() : terminatedSince;
+            if (currentTimeMillis() - terminatedSince > minutesWaitingForClients * 60 * 1000) {
+                System.out.print("All sessions terminated. ");
+                close();
             }
         }
     }
+
 
     private synchronized boolean pullReader(Session session, String string) {
         // return true to push to all clients.
@@ -73,8 +67,10 @@ public class Server implements Runnable, Closeable {
                         session.push("Error: username/password not recognized.");
                         return false;
                     }
-                } else session.push("Error: already logged in as" + session.getUser().getUsername());
-                return false;
+                } else {
+                    session.push("Error: already logged in as" + session.getUser().getUsername());
+                    return false;
+                }
             }
         }
         if (session.getUser() == null) {
@@ -91,15 +87,9 @@ public class Server implements Runnable, Closeable {
                     System.out.println("Waiting for client... ");
                     Socket socket = serverSocket.accept();
                     System.out.println("Connection established.");
-                    synchronized (sessions) {
-                        sessions.add(new Session(socket));
-
-                        synchronized (sThreads) {
-                            sThreads.add(new Thread(sessions.getLast()));
-                            sThreads.getLast().start();
-                            System.out.println("Client online on T#" + sThreads.getLast().getId());
-                        }
-                    }
+                    Session newcomer = new Session(socket);
+                    sessions.add(newcomer);
+                    threadPool.execute(newcomer);
                 } catch (IOException e) {
                     if (!serverSocket.isClosed()) e.printStackTrace();
                 }
@@ -112,6 +102,7 @@ public class Server implements Runnable, Closeable {
     public void close() {
         System.out.println("Exiting...");
         try {
+            threadPool.shutdown();
             serverSocket.close();
         } catch (IOException e) {
             e.printStackTrace();

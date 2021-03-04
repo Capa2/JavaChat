@@ -1,17 +1,20 @@
 import java.io.*;
 import java.net.Socket;
+import java.util.Queue;
 import java.util.Stack;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 
 public class Session implements Runnable, Closeable {
     final private Socket socket;
     private DataInputStream in;
     private DataOutputStream out;
-    final private Stack<String> pulls;
+    final private BlockingQueue<String> pulls;
     private User user;
 
     public Session(Socket socket) {
         this.socket = socket;
-        pulls = new Stack<String>();
+        pulls = new ArrayBlockingQueue<String>(100);
         try {
             in = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
             out = new DataOutputStream(socket.getOutputStream());
@@ -50,11 +53,11 @@ public class Session implements Runnable, Closeable {
         }
         return null;
     }
-    public int countStack() {
-        return pulls.size();
+    public boolean haveMorePulls() {
+        return !pulls.isEmpty();
     }
-    public String popStack() {
-        return pulls.pop();
+    public String poll() {
+        return pulls.poll();
     }
 
     public void setUser(User user) {
