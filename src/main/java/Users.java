@@ -36,6 +36,9 @@ public class Users {
         add(1001, "johan", "jo");
         add(1002, "donald", "do");
         add(1003, "moe", "mo");
+        add(1004, "alex", "al");
+        add(1005, "søren", "sø");
+        add(1006, "kasper", "ka");
     }
 
     public User getUser(int id) {

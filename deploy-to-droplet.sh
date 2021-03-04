@@ -6,7 +6,7 @@
 #SERVER_NAME below MUST mach the DIRECTORY created on your droplet in the /var folder
 SERVER_NAME="javachat"
 
-DROPLET_URL="128.199.45.151"
+DROPLET_URL="karpantschof.com"
 # Change the root below to the non-root user you have setup:
 DROPLET_USER="johan"
 

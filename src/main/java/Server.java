@@ -5,7 +5,6 @@ import java.net.Socket;
 import java.util.Vector;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-
 import static java.lang.System.currentTimeMillis;
 
 public class Server implements Runnable, Closeable {
@@ -45,17 +44,17 @@ public class Server implements Runnable, Closeable {
             });
         }
         if (threadPool.isTerminated()) {
-            terminatedSince = (terminatedSince == 0) ? currentTimeMillis() : terminatedSince;
+            if (terminatedSince == 0) terminatedSince = currentTimeMillis();
             if (currentTimeMillis() - terminatedSince > minutesWaitingForClients * 60 * 1000) {
                 System.out.print("All sessions terminated. ");
                 close();
             }
-        }
+        } else terminatedSince = 0;
     }
 
-
-    private synchronized boolean pullReader(Session session, String string) {
+    private boolean pullReader(Session session, String string) {
         // return true to push to all clients.
+        if (string.equals("killserver")) {close(); return false;}
         if (string.startsWith("login")) {
             String[] loginRequest = string.split(" ");
             if (loginRequest.length == 3) {

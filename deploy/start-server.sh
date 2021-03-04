@@ -1,1 +1,1 @@
-java -cp JavaChat-1.0.jar Main
+java -cp JavaChat-1.1.jar Main karpantschof.com 5000
